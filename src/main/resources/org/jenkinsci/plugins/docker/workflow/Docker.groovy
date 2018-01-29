@@ -159,7 +159,18 @@ class Docker implements Serializable {
         public void tag(String tagName = parsedId.tag, boolean force = true) {
             docker.node {
                 def taggedImageName = toQualifiedImageName(parsedId.userAndRepo + ':' + tagName)
-                docker.script.sh "docker tag ${id} ${taggedImageName}"
+                // The --force option was dropped from the Docker CLI in version 1.10.
+                // We will check for the Docker server version here, and if it supports 
+                // --force, we will use it.
+                def dockerVersion = docker.script.sh(script: "docker version --format=\"{{.Server.Version}}\"", returnStdout: true).trim().split("[.]")
+                def majorVersion = Integer.valueOf(dockerVersion[0])
+                def minorVersion = Integer.valueOf(dockerVersion[1])
+                if (majorVersion == 1 && minorVersion < 10) {
+                    docker.script.sh "docker tag --force=${force} ${id} ${taggedImageName}"
+                } else {
+                    docker.script.echo "Your version of the Docker Engine does not support the --force option, so it will be ignored."
+                    docker.script.sh "docker tag ${id} ${taggedImageName}"
+                }
                 return taggedImageName;
             }
         }
